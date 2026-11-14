@@ -21,6 +21,10 @@ austin.mq.pipeline=rabbitMq
 austin.rabbitmq.ip=localhost
 austin.rabbitmq.port=25672
 
+# RabbitMQ 账号密码（覆盖 application.properties 中的空占位符，按你的 broker 实际账号填写）
+spring.rabbitmq.username=root
+spring.rabbitmq.password=your-rabbitmq-password
+
 # 埋点日志固定走 Kafka(LogUtils -> austinTraceLog -> Flink)，
 # 使用 docker-compose-austin-all.yml 中 austin-kafka 映射到宿主机的 PLAINTEXT_HOST 监听
 austin.kafka.ip=localhost
