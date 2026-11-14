@@ -1,0 +1,61 @@
+server.port=7778
+
+# 本地开发环境配置示例：复制为 application-dev.properties 并填入你自己的值。
+# 该文件包含环境密码，已被 .gitignore 排除，不会提交到仓库。
+
+# Local IDEA runs cannot resolve Docker-internal service names such as austin-mysql.
+austin.database.ip=127.0.0.1
+austin.database.port=3306
+austin.database.username=root
+austin.database.password=your-mysql-password
+
+austin.redis.ip=127.0.0.1
+austin.redis.port=6379
+austin.redis.password=your-redis-password
+
+# TODO  choose : [kafka]/[eventBus]/[rocketMq]/[rabbitMq],recommend  [eventBus] or  [kafka]
+# rabbitMq: 业务消息走本机 Docker 的 RabbitMQ（示例使用 25672 -> 容器 5672 的端口映射，
+# 因宿主机 5672 可能落在 Hyper-V 保留端口段内无法绑定）
+austin.mq.pipeline=rabbitMq
+austin.rabbitmq.ip=localhost
+austin.rabbitmq.port=25672
+
+# 埋点日志固定走 Kafka(LogUtils -> austinTraceLog -> Flink)，
+# 使用 docker-compose-austin-all.yml 中 austin-kafka 映射到宿主机的 PLAINTEXT_HOST 监听
+austin.kafka.ip=localhost
+austin.kafka.port=29092
+
+# todo [xxl-job] switch
+austin.xxl.job.enabled=false
+
+# todo choose: [apollo]/[nacos] switch  ,if [apollo] and [nacos] both false, use local.properties
+austin.apollo.enabled=false
+austin.nacos.enabled=false
+
+# TODO [hades] switch
+austin.rule.engine.enabled=false
+
+# TODO if windows os and need upload file to send message  ,replace path !
+austin.business.upload.crowd.path=/Users/3y/temp
+
+# TODO Whether to enable [sensitive word filter] and set the [path] of sensitive words dictionary
+austin.senswords.filter.enabled=true
+austin.senswords.dict.path=classpath:sensitive-words.txt
+
+# 本地沙箱支付(MockPaymentProvider)：开启后 /billing/payments/providers 会暴露 MOCK，
+# checkout 返回本机沙箱收银台页(/billing/payments/mock/{providerOrderId})，POST 确认即支付成功
+# signing-secret 长度必须 >= 32 位，请替换为你自己的随机串，或通过环境变量 AUSTIN_MOCK_PAYMENT_SIGNING_SECRET 注入
+austin.billing.payment.mock.enabled=true
+austin.billing.payment.mock.signing-secret=replace-me-with-random-secret-at-least-32-chars
+austin.billing.payment.mock.checkout-base-url=http://localhost:7778
+
+# CORS 白名单：localhost 与 127.0.0.1 是两个不同 Origin，都放行
+# （application.properties 里已显式定义该属性，@Value 的默认值不会生效，必须在这里覆盖）
+austin.admin.origin=http://localhost:3000,http://127.0.0.1:3000
+
+# 开启配额硬约束：发送前预占额度(available-1,占用+1)，发送成功后结算扣减，失败释放
+# 默认 false 时 QuotaReserveAction 直接跳过——这就是"发消息额度不变"的原因
+austin.billing.quota-enforcement-enabled=true
+
+# 渠道白名单：放开全部 13 类渠道（默认只启用 10,30,40,110,130）
+austin.channels.enabled=10,20,30,40,50,60,70,80,90,100,110,120,130

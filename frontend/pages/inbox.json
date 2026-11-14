@@ -1,0 +1,179 @@
+{
+  "type": "page",
+  "title": "站内信",
+  "subTitle": "当前用户：${ls:openId}",
+  "body": [
+    {
+      "type": "service",
+      "name": "inboxUnread",
+      "api": {
+        "method": "get",
+        "url": "${ls:backend_url}/inbox/unread-count?receiver=${ls:openId}",
+        "adaptor": "return {status: payload.status, msg: payload.msg, data: {unreadCount: payload.data || 0}};"
+      },
+      "body": {
+        "type": "alert",
+        "level": "info",
+        "showIcon": true,
+        "body": "未读消息：<b>${unreadCount}</b>"
+      }
+    },
+    {
+      "type": "crud",
+      "name": "inboxCrud",
+      "api": {
+        "method": "get",
+        "url": "${ls:backend_url}/inbox/messages?receiver=${ls:openId}&unreadOnly=${unreadOnly || false}&page=${page}&perPage=${perPage}",
+        "adaptor": "var data = payload.data || {}; (data.rows || []).forEach(function(item) { var text = String(item.title || '') + ' ' + String(item.content || ''); item.businessLevel = /\u652f\u4ed8\u6210\u529f|\u62a5\u544a.*\u5b8c\u6210/.test(text) ? 'success' : (/\u989d\u5ea6.*\u9608\u503c|\u989d\u5ea6\u544a\u8b66/.test(text) ? 'warning' : (/\u989d\u5ea6\u4e0d\u8db3|\u5931\u8d25|\u7ec8\u6b62/.test(text) ? 'danger' : 'info')); }); return payload;"
+      },
+      "syncLocation": false,
+      "perPage": 20,
+      "rowClassNameExpr": "this.isRead == 0 ? 'inbox-unread-row' : 'inbox-read-row'",
+      "filter": {
+        "title": "",
+        "mode": "inline",
+        "wrapWithPanel": false,
+        "body": [
+          {
+            "type": "switch",
+            "name": "unreadOnly",
+            "label": "只看未读",
+            "value": false
+          }
+        ]
+      },
+      "headerToolbar": [
+        {
+          "type": "button",
+          "label": "全部已读",
+          "level": "primary",
+          "actionType": "ajax",
+          "confirmText": "将当前用户的全部站内信标记为已读？",
+          "api": {
+            "method": "post",
+            "url": "${ls:backend_url}/inbox/messages/read",
+            "data": {
+              "receiver": "${ls:openId}",
+              "ids": []
+            }
+          },
+          "reload": "inboxCrud,inboxUnread,globalInboxCounter"
+        },
+        "bulkActions",
+        "pagination"
+      ],
+      "footerToolbar": [
+        "switch-per-page",
+        "pagination"
+      ],
+      "bulkActions": [
+        {
+          "type": "button",
+          "label": "批量已读",
+          "level": "primary",
+          "actionType": "ajax",
+          "api": {
+            "method": "post",
+            "url": "${ls:backend_url}/inbox/messages/read",
+            "data": {
+              "receiver": "${ls:openId}",
+              "ids": "${ids}"
+            },
+            "requestAdaptor": "var ids = api.data.ids; api.data.ids = Array.isArray(ids) ? ids.map(Number) : String(ids || '').split(',').filter(Boolean).map(Number); return api;"
+          },
+          "reload": "inboxCrud,inboxUnread,globalInboxCounter"
+        },
+        {
+          "type": "button",
+          "label": "批量删除",
+          "level": "danger",
+          "actionType": "ajax",
+          "confirmText": "确定删除选中的站内信？删除后不可在页面恢复。",
+          "api": {
+            "method": "post",
+            "url": "${ls:backend_url}/inbox/messages/delete",
+            "data": {
+              "receiver": "${ls:openId}",
+              "ids": "${ids}"
+            },
+            "requestAdaptor": "var ids = api.data.ids; api.data.ids = Array.isArray(ids) ? ids.map(Number) : String(ids || '').split(',').filter(Boolean).map(Number); return api;"
+          },
+          "reload": "inboxCrud,inboxUnread,globalInboxCounter"
+        }
+      ],
+      "columns": [
+        {
+          "name": "businessLevel",
+          "label": "类型",
+          "type": "mapping",
+          "width": 90,
+          "map": {
+            "success": "<span class=\"notify-type-pill success\">成功</span>",
+            "warning": "<span class=\"notify-type-pill warning\">告警</span>",
+            "danger": "<span class=\"notify-type-pill danger\">异常</span>",
+            "info": "<span class=\"notify-type-pill info\">通知</span>"
+          }
+        },
+        {
+          "name": "isRead",
+          "label": "状态",
+          "type": "mapping",
+          "width": 80,
+          "map": {
+            "0": "<span class=\"label label-primary\">未读</span>",
+            "1": "<span class=\"label label-default\">已读</span>"
+          }
+        },
+        {
+          "name": "title",
+          "label": "标题"
+        },
+        {
+          "name": "content",
+          "label": "正文"
+        },
+        {
+          "name": "url",
+          "label": "链接",
+          "type": "link",
+          "blank": false,
+          "visibleOn": "this.url"
+        },
+        {
+          "name": "created",
+          "label": "收到时间",
+          "type": "datetime",
+          "format": "YYYY-MM-DD HH:mm:ss",
+          "valueFormat": "X"
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "fixed": "right",
+          "buttons": [
+            {
+              "type": "button",
+              "label": "标记已读",
+              "level": "link",
+              "visibleOn": "this.isRead == 0",
+              "actionType": "ajax",
+              "api": "post:${ls:backend_url}/inbox/messages/${id}/read?receiver=${ls:openId}",
+              "reload": "inboxCrud,inboxUnread,globalInboxCounter"
+            },
+            {
+              "type": "button",
+              "label": "删除",
+              "level": "link",
+              "className": "text-danger",
+              "actionType": "ajax",
+              "confirmText": "确定删除这条站内信？",
+              "api": "delete:${ls:backend_url}/inbox/messages/${id}?receiver=${ls:openId}",
+              "reload": "inboxCrud,inboxUnread,globalInboxCounter"
+            }
+          ]
+        }
+      ],
+      "placeholder": "暂无站内信"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "type": "page",
+  "body": [
+    {
+      "title": "统一链路查询（最近72小时）",
+      "type": "form",
+      "target": "my_crud",
+      "body": [
+        {
+          "type": "input-text",
+          "name": "keywords",
+          "label": "接收者 / 查询ID:",
+          "required": true,
+          "placeholder": "输入接收者、messageId、模板 ID 或 16 位 businessId",
+          "description": "系统会自动识别查询类型；输入模板 ID 可查看该模板的发送明细。"
+        }
+      ],
+      "submitText": "搜索"
+    },
+    {
+      "type": "crud",
+      "name": "my_crud",
+      "api": {
+        "url": "${ls:backend_url}/trace/user",
+        "method": "post",
+        "data": {
+          "receiver": "${keywords}"
+        }
+      },
+      "columns": [
+        {
+          "name": "businessId",
+          "label": "业务ID"
+        },
+        {
+          "name": "title",
+          "label": "模板名称"
+        },
+        {
+          "name": "sendType",
+          "label": "发送类型"
+        },
+        {
+          "name": "creator",
+          "label": "模板创建者"
+        },
+        {
+          "name": "detail",
+          "label": "发送细节"
+        }
+      ]
+    }
+  ]
+}

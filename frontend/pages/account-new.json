@@ -1,0 +1,122 @@
+{
+  "type": "page",
+  "title": "新建渠道账号",
+  "subTitle": "可创建的渠道由后端配置决定；IM 无需账号",
+  "body": [
+    {
+      "type": "form",
+      "name": "channelAccountForm",
+      "mode": "horizontal",
+      "affixFooter": true,
+      "redirect": "/account/list?page=1",
+      "messages": {"validateFailed": "请检查标红字段，修正后再保存"},
+      "body": [
+        {
+          "type": "select",
+          "name": "sendChannel",
+          "label": "发送渠道",
+          "required": true,
+          "searchable": true,
+          "clearable": false,
+          "source": {
+            "method": "get",
+            "url": "${ls:backend_url}/channel/list?creator=${ls:openId}&includeDisabled=false",
+            "adaptor": "var options = (payload.data || []).filter(function(item) { return item.enabled === true && item.requiresAccount === true; }).map(function(item) { return {label: item.name, value: String(item.code), requiresAccount: item.requiresAccount, availabilityStatus: item.availabilityStatus, availabilityMessage: item.availabilityMessage}; }); return {status: payload.status, msg: payload.msg, data: options};"
+          },
+          "autoFill": {
+            "channelAvailabilityStatus": "${availabilityStatus}",
+            "channelAvailabilityMessage": "${availabilityMessage}"
+          }
+        },
+        {
+          "type": "alert",
+          "level": "info",
+          "visibleOn": "this.channelAvailabilityMessage",
+          "body": "${channelAvailabilityMessage}"
+        },
+        {
+          "type": "input-text",
+          "name": "name",
+          "label": "账号名称",
+          "required": true,
+          "size": "lg",
+          "placeholder": "便于在模板账号下拉框中识别"
+        },
+        {
+          "type": "panel",
+          "title": "Mock 短信账号",
+          "visibleOn": "this.sendChannel == 30",
+          "body": [{"type": "tpl", "tpl": "<p>个人开发者版只创建 <code>MockSmsScript</code> 账号。消息会经过完整 Austin 链路并落库，但不会真实发送或计费。</p>"}]
+        },
+        {
+          "type": "fieldSet",
+          "title": "通用 Webhook 配置",
+          "visibleOn": "this.sendChannel == 130",
+          "body": [
+            {
+              "type": "input-password",
+              "name": "webhookUrl",
+              "label": "HTTPS Webhook URL",
+              "required": true,
+              "size": "lg",
+              "placeholder": "https://public.example.com/events",
+              "validations": {"matchRegexp": "/^https:\\/\\/[^\\s]+$/"},
+              "validationErrors": {"matchRegexp": "Webhook URL 只接受 https:// 地址"},
+              "description": "后端固定使用 POST。页面不会在提示或日志中回显完整地址。"
+            },
+            {
+              "type": "input-table",
+              "name": "webhookHeaders",
+              "label": "自定义 Header",
+              "addable": true,
+              "removable": true,
+              "editable": true,
+              "needConfirm": false,
+              "columns": [
+                {
+                  "type": "input-text",
+                  "name": "key",
+                  "label": "Header 名称",
+                  "required": true,
+                  "validations": {"matchRegexp": "/^(?!(host|content-type|content-length|connection|transfer-encoding|proxy-authorization|proxy-connection|forwarded|x-forwarded-for|x-forwarded-host|x-http-method-override|x-method-override)$)[A-Za-z0-9-]+$/i"},
+                  "validationErrors": {"matchRegexp": "该 Header 不允许设置或名称格式不正确"}
+                },
+                {"type": "input-password", "name": "value", "label": "Header 值", "required": true}
+              ]
+            }
+          ]
+        },
+        {
+          "type": "textarea",
+          "name": "accountConfig",
+          "label": "账号配置（JSON）",
+          "visibleOn": "this.sendChannel && this.sendChannel != 30 && this.sendChannel != 130",
+          "requiredOn": "this.sendChannel && this.sendChannel != 30 && this.sendChannel != 130",
+          "minRows": 6,
+          "maxRows": 16,
+          "validations": {"isJson": true},
+          "validationErrors": {"isJson": "账号配置必须是合法 JSON"},
+          "description": "邮箱和飞书也可能由环境变量提供账号；已有环境变量账号无需在此重复创建。"
+        }
+      ],
+      "actions": [
+        {"type": "button", "label": "取消", "actionType": "link", "link": "/account/list"},
+        {"type": "submit", "label": "保存", "level": "primary"}
+      ],
+      "api": {
+        "method": "post",
+        "url": "${ls:backend_url}/account/save",
+        "data": {
+          "name": "${name}",
+          "sendChannel": "${sendChannel}",
+          "accountConfig": "${accountConfig}",
+          "webhookUrl": "${webhookUrl}",
+          "webhookHeaders": "${webhookHeaders}",
+          "creator": "${ls:openId}"
+        },
+        "requestAdaptor": "var channel = Number(api.data.sendChannel); if (channel === 30) { api.data.accountConfig = JSON.stringify({supplierId: 0, supplierName: 'Mock短信', scriptName: 'MockSmsScript'}); } if (channel === 130) { var url = String(api.data.webhookUrl || ''); if (url.indexOf('https://') !== 0) { throw new Error('Webhook URL 只接受 https:// 地址'); } var forbidden = /^(host|content-type|content-length|connection|transfer-encoding|proxy-authorization|proxy-connection|forwarded|x-forwarded-for|x-forwarded-host|x-http-method-override|x-method-override)$/i; var rows = api.data.webhookHeaders || []; if (rows.length > 32) { throw new Error('Webhook 自定义 Header 不能超过 32 个'); } var headers = {}; rows.forEach(function(item) { var key = String(item.key || '').trim(); var value = String(item.value || ''); if (!key || forbidden.test(key)) { throw new Error('存在不允许设置的 Header 名称'); } if (value.length > 8192 || /[\\r\\n]/.test(value)) { throw new Error('Webhook Header 值无效'); } headers[key] = value; }); api.data.accountConfig = JSON.stringify({webhook: url, headers: headers}); } delete api.data.webhookUrl; delete api.data.webhookHeaders; return api;"
+      }
+    }
+  ],
+  "toolbar": [{"type": "button", "actionType": "link", "link": "/account/list", "label": "返回列表"}]
+}

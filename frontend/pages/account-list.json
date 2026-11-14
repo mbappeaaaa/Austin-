@@ -1,0 +1,140 @@
+{
+  "type": "page",
+  "title": "渠道账号",
+  "subTitle": "接口返回的配置均为脱敏值；编辑时 ****** 会原样提交并由后端恢复",
+  "body": [
+    {
+      "type": "crud",
+      "name": "accountCrud",
+      "api": {
+        "method": "get",
+        "url": "${ls:backend_url}/account/list?creator=${ls:openId}",
+        "adaptor": "var rows = (payload.data || []).map(function(row) { row.webhookUrl = ''; row.webhookHeaders = []; if (Number(row.sendChannel) === 130) { try { var config = JSON.parse(row.accountConfig || '{}'); row.webhookUrl = config.webhook || ''; Object.keys(config.headers || {}).forEach(function(key) { row.webhookHeaders.push({key: key, value: config.headers[key]}); }); } catch (ignore) {} } return row; }); return {status: payload.status, msg: payload.msg, data: {count: rows.length, rows: rows}};"
+      },
+      "syncLocation": false,
+      "headerToolbar": [{"type": "button", "label": "新建账号", "level": "primary", "actionType": "link", "link": "/account/new", "requiredPermission": "ACCOUNT_WRITE"}],
+      "columns": [
+        {"name": "id", "label": "ID", "width": 80},
+        {"name": "name", "label": "账号名称"},
+        {
+          "name": "sendChannel",
+          "label": "发送渠道",
+          "type": "select",
+          "disabled": true,
+          "source": {
+            "method": "get",
+            "url": "${ls:backend_url}/channel/list?creator=${ls:openId}&includeDisabled=true",
+            "adaptor": "return {status: payload.status, msg: payload.msg, data: (payload.data || []).map(function(item) { return {label: item.name, value: String(item.code)}; })};"
+          }
+        },
+        {
+          "name": "availabilityStatus",
+          "label": "可用状态",
+          "type": "mapping",
+          "map": {
+            "READY": "<span class=\"label label-success\">READY</span>",
+            "DISABLED": "<span class=\"label label-danger\">DISABLED</span>",
+            "NOT_CONFIGURED": "<span class=\"label label-warning\">NOT_CONFIGURED</span>",
+            "QUALIFICATION_REQUIRED": "<span class=\"label label-warning\">QUALIFICATION_REQUIRED</span>",
+            "CLIENT_REQUIRED": "<span class=\"label label-warning\">CLIENT_REQUIRED</span>"
+          }
+        },
+        {"name": "availabilityMessage", "label": "状态说明"},
+        {"label": "账号配置", "type": "tpl", "tpl": "<span class=\"text-muted\">已配置（敏感项已脱敏）</span>"},
+        {
+          "type": "operation",
+          "label": "操作",
+          "fixed": "right",
+          "buttons": [
+            {
+              "type": "button",
+              "label": "编辑",
+              "requiredPermission": "ACCOUNT_WRITE",
+              "level": "link",
+              "actionType": "dialog",
+              "dialog": {
+                "title": "编辑账号 · ${name}",
+                "size": "lg",
+                "body": {
+                  "type": "form",
+                  "reload": "accountCrud",
+                  "body": [
+                    {"type": "input-text", "name": "name", "label": "账号名称", "required": true},
+                    {"type": "static", "name": "sendChannel", "label": "渠道编码"},
+                    {"type": "alert", "level": "info", "body": "脱敏占位符 ****** 必须保留。无需也无法从页面恢复真实密钥。"},
+                    {
+                      "type": "input-password",
+                      "name": "webhookUrl",
+                      "label": "HTTPS Webhook URL",
+                      "visibleOn": "this.sendChannel == 130",
+                      "requiredOn": "this.sendChannel == 130",
+                      "validations": {"matchRegexp": "/^(\\*{6}|https:\\/\\/[^\\s]+)$/"},
+                      "validationErrors": {"matchRegexp": "保留 ******，或填写新的 https:// 地址"}
+                    },
+                    {
+                      "type": "input-table",
+                      "name": "webhookHeaders",
+                      "label": "自定义 Header",
+                      "visibleOn": "this.sendChannel == 130",
+                      "addable": true,
+                      "removable": true,
+                      "editable": true,
+                      "needConfirm": false,
+                      "columns": [
+                        {
+                          "type": "input-text",
+                          "name": "key",
+                          "label": "Header 名称",
+                          "required": true,
+                          "validations": {"matchRegexp": "/^(?!(host|content-type|content-length|connection|transfer-encoding|proxy-authorization|proxy-connection|forwarded|x-forwarded-for|x-forwarded-host|x-http-method-override|x-method-override)$)[A-Za-z0-9-]+$/i"},
+                          "validationErrors": {"matchRegexp": "该 Header 不允许设置或名称格式不正确"}
+                        },
+                        {"type": "input-password", "name": "value", "label": "Header 值", "required": true}
+                      ]
+                    },
+                    {
+                      "type": "textarea",
+                      "name": "accountConfig",
+                      "label": "账号配置（已脱敏 JSON）",
+                      "visibleOn": "this.sendChannel != 130",
+                      "requiredOn": "this.sendChannel != 130",
+                      "minRows": 8,
+                      "validations": {"isJson": true},
+                      "validationErrors": {"isJson": "账号配置必须是合法 JSON"}
+                    }
+                  ],
+                  "api": {
+                    "method": "post",
+                    "url": "${ls:backend_url}/account/save",
+                    "data": {
+                      "id": "${id}",
+                      "name": "${name}",
+                      "sendChannel": "${sendChannel}",
+                      "creator": "${ls:openId}",
+                      "accountConfig": "${accountConfig}",
+                      "webhookUrl": "${webhookUrl}",
+                      "webhookHeaders": "${webhookHeaders}"
+                    },
+                    "requestAdaptor": "if (Number(api.data.sendChannel) === 130) { var url = String(api.data.webhookUrl || ''); if (url !== '******' && url.indexOf('https://') !== 0) { throw new Error('Webhook URL 必须保留脱敏占位符或使用 https:// 地址'); } var forbidden = /^(host|content-type|content-length|connection|transfer-encoding|proxy-authorization|proxy-connection|forwarded|x-forwarded-for|x-forwarded-host|x-http-method-override|x-method-override)$/i; var rows = api.data.webhookHeaders || []; if (rows.length > 32) { throw new Error('Webhook 自定义 Header 不能超过 32 个'); } var headers = {}; rows.forEach(function(item) { var key = String(item.key || '').trim(); var value = String(item.value || ''); if (!key || forbidden.test(key)) { throw new Error('存在不允许设置的 Header 名称'); } if (value.length > 8192 || /[\\r\\n]/.test(value)) { throw new Error('Webhook Header 值无效'); } headers[key] = value; }); api.data.accountConfig = JSON.stringify({webhook: url, headers: headers}); } delete api.data.webhookUrl; delete api.data.webhookHeaders; return api;"
+                  }
+                }
+              }
+            },
+            {
+              "type": "button",
+              "label": "删除",
+              "requiredPermission": "ACCOUNT_WRITE",
+              "level": "link",
+              "className": "text-danger",
+              "actionType": "ajax",
+              "confirmText": "确定删除该账号？后端将执行逻辑删除。",
+              "api": "delete:${ls:backend_url}/account/delete/${id}",
+              "reload": "accountCrud"
+            }
+          ]
+        }
+      ],
+      "placeholder": "暂无渠道账号"
+    }
+  ]
+}

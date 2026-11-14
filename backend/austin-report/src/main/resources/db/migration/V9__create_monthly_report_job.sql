@@ -1,0 +1,33 @@
+CREATE TABLE `report_generation_job`
+(
+    `id`                BIGINT        NOT NULL AUTO_INCREMENT,
+    `tenant_id`         BIGINT        NOT NULL,
+    `report_type`       VARCHAR(64)   NOT NULL,
+    `period_start`      DATE          NOT NULL,
+    `period_end`        DATE          NOT NULL,
+    `status`            VARCHAR(32)   NOT NULL,
+    `attempt_count`     INT           NOT NULL DEFAULT 0,
+    `max_attempts`      INT           NOT NULL DEFAULT 3,
+    `replay_count`      INT           NOT NULL DEFAULT 0,
+    `next_retry_at`     INT                    DEFAULT NULL,
+    `locked_by`         VARCHAR(128)           DEFAULT NULL,
+    `locked_until`      INT                    DEFAULT NULL,
+    `storage_provider`  VARCHAR(32)            DEFAULT NULL,
+    `storage_key`       VARCHAR(512)            DEFAULT NULL,
+    `original_filename` VARCHAR(255)            DEFAULT NULL,
+    `content_type`      VARCHAR(128)            DEFAULT NULL,
+    `file_size`         BIGINT                  DEFAULT NULL,
+    `file_sha256`       CHAR(64)                DEFAULT NULL,
+    `last_error`        VARCHAR(512)            DEFAULT NULL,
+    `started_at`        INT                    DEFAULT NULL,
+    `completed_at`      INT                    DEFAULT NULL,
+    `created`           INT           NOT NULL,
+    `updated`           INT           NOT NULL,
+    `version`           BIGINT        NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_report_tenant_type_period`
+        (`tenant_id`, `report_type`, `period_start`, `period_end`),
+    KEY `idx_report_dispatch` (`status`, `next_retry_at`, `locked_until`, `created`),
+    KEY `idx_report_tenant_created` (`tenant_id`, `created`, `id`),
+    CONSTRAINT `fk_report_job_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='异步报告生成任务及文件元数据';

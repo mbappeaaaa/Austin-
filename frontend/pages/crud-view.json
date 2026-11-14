@@ -1,0 +1,57 @@
+{
+  "type": "page",
+  "title": "模板详情",
+  "body": [
+    {
+      "type": "form",
+      "mode": "horizontal",
+      "initApi": "${ls:backend_url}/messageTemplate/query/${params.id}",
+      "actions": [],
+      "body": [
+        {
+          "type": "alert",
+          "level": "danger",
+          "showIcon": true,
+          "visibleOn": "this.channelReady === false",
+          "body": "${channelAvailabilityMessage || '渠道已禁用或账号未配置'}。可继续查看历史模板内容，但不能测试发送或启动任务。"
+        },
+        {"type": "static", "name": "id", "label": "模板 ID"},
+        {"type": "static", "name": "name", "label": "模板名称"},
+        {
+          "type": "select",
+          "name": "sendChannel",
+          "label": "发送渠道",
+          "disabled": true,
+          "source": {
+            "method": "get",
+            "url": "${ls:backend_url}/channel/list?creator=${ls:openId}&includeDisabled=true",
+            "adaptor": "return {status: payload.status, msg: payload.msg, data: (payload.data || []).map(function(item) { return {label: item.name, value: String(item.code)}; })};"
+          }
+        },
+        {"type": "static", "name": "sendAccount", "label": "发送账号"},
+        {
+          "type": "mapping",
+          "name": "channelAvailabilityStatus",
+          "label": "渠道状态",
+          "map": {
+            "READY": "<span class=\"label label-success\">READY</span>",
+            "DISABLED": "<span class=\"label label-danger\">DISABLED</span>",
+            "NOT_CONFIGURED": "<span class=\"label label-warning\">NOT_CONFIGURED</span>",
+            "QUALIFICATION_REQUIRED": "<span class=\"label label-warning\">QUALIFICATION_REQUIRED</span>",
+            "CLIENT_REQUIRED": "<span class=\"label label-warning\">CLIENT_REQUIRED</span>"
+          }
+        },
+        {"type": "static", "name": "channelAvailabilityMessage", "label": "状态说明"},
+        {"type": "static", "name": "title", "label": "标题", "visibleOn": "this.title"},
+        {"type": "static", "name": "content", "label": "正文", "visibleOn": "this.content"},
+        {"type": "static", "name": "url", "label": "跳转链接", "visibleOn": "this.url"},
+        {"type": "static", "name": "body", "label": "Webhook Body", "visibleOn": "this.sendChannel == 130"},
+        {"type": "json", "name": "msgContent", "label": "原始模板内容"}
+      ]
+    }
+  ],
+  "toolbar": [
+    {"type": "button", "label": "返回列表", "actionType": "link", "link": "/crud/list"},
+    {"type": "button", "label": "编辑", "level": "primary", "actionType": "link", "link": "/crud/${params.id}/edit", "requiredPermission": "TEMPLATE_WRITE"}
+  ]
+}

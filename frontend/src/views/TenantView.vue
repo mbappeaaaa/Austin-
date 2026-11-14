@@ -1,0 +1,5 @@
+<script setup lang="ts">
+import { currentUser, tenantLabel } from '../auth'
+const roleLabels:Record<string,string>={ADMIN:'系统管理员',OPERATOR:'运营人员',AUDITOR:'审计人员',USER:'普通用户'}
+</script>
+<template><div class="page-container narrow-page"><div class="page-heading"><div><span class="eyebrow blue">Tenant settings</span><h1>基本信息</h1><p>当前控制台的租户与运行环境信息。</p></div></div><div class="form-card"><a-descriptions bordered :column="2"><a-descriptions-item label="租户">{{ tenantLabel }}</a-descriptions-item><a-descriptions-item label="租户 ID">{{ currentUser?.tenantId }}</a-descriptions-item><a-descriptions-item label="运行环境"><span class="sandbox-badge">SANDBOX</span></a-descriptions-item><a-descriptions-item label="当前管理员">{{ currentUser?.displayName }}</a-descriptions-item><a-descriptions-item label="登录账号">{{ currentUser?.username }}</a-descriptions-item><a-descriptions-item label="当前角色">{{ roleLabels[currentUser?.role||''] }}</a-descriptions-item></a-descriptions><a-alert type="info" show-icon class="top-gap-lg" message="租户名称编辑接口尚未提供，此页目前为只读。" /></div></div></template>

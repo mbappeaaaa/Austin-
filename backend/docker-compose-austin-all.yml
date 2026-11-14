@@ -1,0 +1,408 @@
+# ============================================================
+# Austin 全组件部署（Docker Desktop）
+# 组件：核心(MySQL/Redis/RabbitMQ/Nacos/XXL-JOB/Austin)
+#       + 可选增强(监控 Prometheus/Grafana, Graylog, Flink, Hive/Hadoop/Presto, Metabase)
+# 用法：
+#   1) 并入渠道迁移 SQL（首次建库自动执行）：
+#      Copy-Item "doc/sql/migrations/V20260820__personal_developer_channels.sql" "doc/sql/"
+#   2) 构建主应用镜像（只需主应用 jar，不要整包 mvn package，避免 hive/pentaho 死链）：
+#      mvn -pl austin-web -am -DskipTests package
+#      docker compose -f docker-compose-austin-all.yml build austin
+#   3) 启动：
+#      docker compose -f docker-compose-austin-all.yml up -d
+#   4) 停止 / 清理：
+#      docker compose -f docker-compose-austin-all.yml down
+#      docker compose -f docker-compose-austin-all.yml down -v
+# 单个组件管理：docker compose -f docker-compose-austin-all.yml <up|restart|logs> <服务名>
+# ============================================================
+name: austin-all
+
+networks:
+  austin:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  namenode:
+  datanode:
+  es-data:
+  mongo-data:
+
+services:
+  # ==================== 1. 核心存储 ====================
+  # MySQL 5.7：首次启动自动执行 /docker-entrypoint-initdb.d 下 *.sql（均含 CREATE DATABASE+USE），
+  # 自动建出 austin / xxl_job / nacos_config 三个库。
+  austin-mysql:
+    image: mysql:5.7
+    container_name: austin-mysql
+    hostname: austin-mysql
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_ROOT_HOST: "%"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "33306:3306"   # 宿主机 33306；本机原生 MySQL 占用了 3306。容器内仍为 austin-mysql:3306
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./doc/sql:/docker-entrypoint-initdb.d
+    networks: [austin]
+
+  # Redis 3.2：登录 Session / 去重 / 流控 / 全链路日志
+  austin-redis:
+    image: redis:3.2
+    container_name: austin-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./doc/docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:rw
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks: [austin]
+
+  # ==================== 2. 消息队列 RabbitMQ ====================
+  # 账号密码与 application.properties 的 spring.rabbitmq 一致(root / 123456, vhost=/)
+  rabbitmq:
+    image: rabbitmq:3.9.15-management
+    container_name: rabbitmq
+    hostname: my-rabbit
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      RABBITMQ_DEFAULT_USER: root
+      RABBITMQ_DEFAULT_PASS: "123456"
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # 管理控制台
+    networks: [austin]
+
+  # ==================== 2b. 消息队列 Kafka（埋点日志流） ====================
+  # 业务消息走 RabbitMQ，埋点日志固定走 Kafka，由 Flink(austin-stream) 消费聚合后写 Redis。
+  # 双监听：容器间(含 Flink)用 austin-kafka:9092；宿主机本机启动 austin-web 用 localhost:29092
+  # （application-dev.properties 中 austin.kafka.ip=localhost / austin.kafka.port=29092）
+  austin-zookeeper:
+    image: zookeeper:3.8.4
+    container_name: austin-zookeeper
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+      ZOO_4LW_COMMANDS_WHITELIST: "*"
+    ports:
+      - "2181:2181"
+    networks: [austin]
+
+  austin-kafka:
+    image: wurstmeister/kafka
+    container_name: austin-kafka
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TZ: Asia/Shanghai
+      KAFKA_BROKER_ID: 0
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://austin-kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ZOOKEEPER_CONNECT: austin-zookeeper:2181
+      KAFKA_CREATE_TOPICS: "austinBusiness:1:1,austinRecall:1:1,austinTraceLog:1:1"
+      KAFKA_HEAP_OPTS: -Xmx512M -Xms256M
+    ports:
+      - "29092:29092"   # 宿主机访问（容器间 9092 不映射，走内部网络）
+    depends_on:
+      - austin-zookeeper
+    networks: [austin]
+
+  # ==================== 3. 配置中心 Nacos ====================
+  # 持久化到 MySQL 的 nacos_config 库；hades 规则引擎也复用 nacos
+  austin-nacos:
+    image: nacos/nacos-server:v2.1.0
+    container_name: austin-nacos-server
+    hostname: austin-nacos-server
+    restart: on-failure
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: austin-mysql
+      MYSQL_SERVICE_PORT: 3306
+      MYSQL_SERVICE_USER: root
+      MYSQL_SERVICE_PASSWORD: 123456
+      MYSQL_SERVICE_DB_NAME: nacos_config
+      JVM_XMS: 256m
+      JVM_XMX: 256m
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+      - "9849:9849"
+    depends_on:
+      - austin-mysql
+    networks: [austin]
+
+  # ==================== 4. 定时任务 XXL-JOB ====================
+  austin-xxl-job:
+    image: xuxueli/xxl-job-admin:2.3.0
+    container_name: xxl-job-admin
+    restart: unless-stopped
+    ports:
+      - "18080:8080"   # 管理控制台
+    environment:
+      PARAMS: >-
+        --server.port=8080
+        --spring.datasource.url=jdbc:mysql://austin-mysql:3306/xxl_job?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&useSSL=false&zeroDateTimeBehavior=convertToNull
+        --spring.datasource.username=root
+        --spring.datasource.password=123456
+    depends_on:
+      - austin-mysql
+    networks: [austin]
+
+  # ==================== 5. 监控 Prometheus + Grafana ====================
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./doc/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks: [austin]
+
+  alertmanager:
+    image: prom/alertmanager
+    container_name: alertmanager
+    restart: always
+    ports:
+      - "9093:9093"
+    networks: [austin]
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    networks: [austin]
+
+  node-exporter:
+    image: quay.io/prometheus/node-exporter
+    container_name: node-exporter
+    restart: always
+    ports:
+      - "9100:9100"
+    networks: [austin]
+
+  cadvisor:
+    image: google/cadvisor:latest
+    container_name: cadvisor
+    restart: always
+    ports:
+      - "8899:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [austin]
+
+  # ==================== 6. 分布式日志 Graylog ====================
+  mongo:
+    image: mongo:4.2
+    container_name: graylog-mongo
+    restart: always
+    volumes:
+      - mongo-data:/data/db
+    networks: [austin]
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.10.2
+    container_name: graylog-es
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - http.host=0.0.0.0
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks: [austin]
+
+  graylog:
+    image: graylog/graylog:4.2
+    container_name: graylog
+    restart: always
+    entrypoint: /usr/bin/tini -- wait-for-it elasticsearch:9200 -- /docker-entrypoint.sh
+    environment:
+      GRAYLOG_PASSWORD_SECRET: somepasswordpepper
+      GRAYLOG_ROOT_PASSWORD_SHA2: 8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+      GRAYLOG_HTTP_EXTERNAL_URI: http://localhost:9009/
+      GRAYLOG_ROOT_TIMEZONE: Asia/Shanghai
+    depends_on:
+      - mongo
+      - elasticsearch
+    ports:
+      - "9009:9000"   # Web 控制台
+      - "1514:1514"
+      - "1514:1514/udp"
+      - "12201:12201" # GELF
+      - "12201:12201/udp"
+    networks: [austin]
+
+  # ==================== 7. 实时计算 Flink ====================
+  jobmanager:
+    image: flink:1.16.1
+    container_name: flink-jobmanager
+    restart: always
+    ports:
+      - "18081:8081"   # Flink Web UI
+    command: jobmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+      TZ: Asia/Shanghai
+      SET_CONTAINER_TIMEZONE: "true"
+      CONTAINER_TIMEZONE: Asia/Shanghai
+    networks: [austin]
+
+  taskmanager:
+    image: flink:1.16.1
+    container_name: flink-taskmanager
+    restart: always
+    command: taskmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2
+      TZ: Asia/Shanghai
+      SET_CONTAINER_TIMEZONE: "true"
+      CONTAINER_TIMEZONE: Asia/Shanghai
+    depends_on:
+      - jobmanager
+    networks: [austin]
+
+  # ==================== 8. 数据仓库 Hive/Hadoop/Presto ====================
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-java8
+    container_name: hive-namenode
+    restart: always
+    environment:
+      - CLUSTER_NAME=test
+    ports:
+      - "50070:50070"
+      - "8020:8020"
+    volumes:
+      - namenode:/hadoop/dfs/name
+    networks: [austin]
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-java8
+    container_name: hive-datanode
+    restart: always
+    environment:
+      - SERVICE_PRECONDITION=namenode:50070
+    ports:
+      - "50075:50075"
+      - "50010:50010"
+      - "50020:50020"
+    volumes:
+      - datanode:/hadoop/dfs/data
+    depends_on:
+      - namenode
+    networks: [austin]
+
+  hive-metastore-postgresql:
+    image: bde2020/hive-metastore-postgresql:2.3.0
+    container_name: hive-metastore-postgresql
+    ports:
+      - "5433:5432"   # 宿主机 5433，避免占用本地 5432
+    networks: [austin]
+
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-metastore
+    restart: always
+    command: /opt/hive/bin/hive --service metastore
+    environment:
+      - SERVICE_PRECONDITION=namenode:50070 datanode:50075 hive-metastore-postgresql:5432
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionURL=jdbc:postgresql://hive-metastore-postgresql/metastore
+    ports:
+      - "9083:9083"
+    depends_on:
+      - namenode
+      - datanode
+      - hive-metastore-postgresql
+    networks: [austin]
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-server
+    restart: always
+    environment:
+      - SERVICE_PRECONDITION=hive-metastore:9083
+    ports:
+      - "10000:10000"   # HiveServer2 (beeline)
+    depends_on:
+      - hive-metastore
+    networks: [austin]
+
+  presto-coordinator:
+    image: shawnzhu/prestodb:0.181
+    container_name: presto-coordinator
+    restart: always
+    ports:
+      - "8080:8080"
+    networks: [austin]
+
+  # ==================== 9. 数据可视化 Metabase ====================
+  metabase:
+    image: metabase/metabase
+    container_name: metabase
+    restart: always
+    ports:
+      - "5001:3000"
+    networks: [austin]
+
+  # ==================== 10. Austin 主应用 ====================
+  # 只需 austin-web jar，PARAMS 把消息队列切到 rabbitMq 并指向 rabbitmq；nacos/xxl 沿用 test 默认值
+  austin:
+    build: { context: ./ }
+    image: austin:1.0
+    container_name: austin
+    restart: always
+    ports:
+      - "7777:7777"
+    environment:
+      - PARAMS=--spring.profiles.active=test --austin.mq.pipeline=rabbitMq --austin.rabbitmq.ip=rabbitmq --austin.rabbitmq.port=5672
+      - TZ=Asia/Shanghai
+      - SET_CONTAINER_TIMEZONE=true
+      - CONTAINER_TIMEZONE=Asia/Shanghai
+      - AUSTIN_ENABLED_CHANNELS=${AUSTIN_ENABLED_CHANNELS:-10,30,40,110,130}
+      - AUSTIN_ENABLED_SMS_SCRIPTS=${AUSTIN_ENABLED_SMS_SCRIPTS:-MockSmsScript}
+      - AUSTIN_SMTP_HOST=${AUSTIN_SMTP_HOST:-}
+      - AUSTIN_SMTP_PORT=${AUSTIN_SMTP_PORT:-}
+      - AUSTIN_SMTP_USER=${AUSTIN_SMTP_USER:-}
+      - AUSTIN_SMTP_FROM=${AUSTIN_SMTP_FROM:-}
+      - AUSTIN_SMTP_AUTH_CODE=${AUSTIN_SMTP_AUTH_CODE:-}
+      - AUSTIN_SMTP_SSL_ENABLED=${AUSTIN_SMTP_SSL_ENABLED:-true}
+      - AUSTIN_SMTP_STARTTLS_ENABLED=${AUSTIN_SMTP_STARTTLS_ENABLED:-false}
+      - AUSTIN_EMAIL_TEST_ENABLED=${AUSTIN_EMAIL_TEST_ENABLED:-false}
+      - AUSTIN_EMAIL_TEST_TO=${AUSTIN_EMAIL_TEST_TO:-}
+      - AUSTIN_FEISHU_ROBOT_ENABLED=${AUSTIN_FEISHU_ROBOT_ENABLED:-false}
+      - AUSTIN_FEISHU_ROBOT_WEBHOOK=${AUSTIN_FEISHU_ROBOT_WEBHOOK:-}
+      - AUSTIN_FEISHU_TEST_ENABLED=${AUSTIN_FEISHU_TEST_ENABLED:-false}
+      - AUSTIN_FEISHU_TEST_ADMIN_TOKEN=${AUSTIN_FEISHU_TEST_ADMIN_TOKEN:-}
+      - AUSTIN_ADMIN_ORIGIN=${AUSTIN_ADMIN_ORIGIN:-http://localhost:3000}
+      - AUSTIN_AUTH_BOOTSTRAP_ENABLED=${AUSTIN_AUTH_BOOTSTRAP_ENABLED:-true}
+      - AUSTIN_AUTH_BOOTSTRAP_USERNAME=${AUSTIN_AUTH_BOOTSTRAP_USERNAME:-dev-user}
+      - AUSTIN_AUTH_BOOTSTRAP_PASSWORD=${AUSTIN_AUTH_BOOTSTRAP_PASSWORD:-admin123}
+      - AUSTIN_AUTH_BOOTSTRAP_DISPLAY_NAME=${AUSTIN_AUTH_BOOTSTRAP_DISPLAY_NAME:-Austin 管理员}
+    depends_on:
+      - austin-mysql
+      - austin-redis
+      - rabbitmq
+      - austin-nacos
+      - austin-xxl-job
+    networks: [austin]

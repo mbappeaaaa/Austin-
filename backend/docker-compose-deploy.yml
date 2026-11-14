@@ -1,0 +1,137 @@
+version: '3'
+services:
+  austin-mysql:
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+      MYSQL_ROOT_HOST: '%'
+      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_DATABASE: austin
+    restart: always
+    container_name: austin-mysql
+    image: mysql:5.7
+    hostname: mysql
+    volumes:
+      - ./doc/sql/nacos.sql:/docker-entrypoint-initdb.d/10-nacos.sql:ro
+      - ./doc/sql/xxl-job.sql:/docker-entrypoint-initdb.d/20-xxl-job.sql:ro
+      - ./doc/docker/mysql/mysql.cnf:/etc/mysql/my.cnf
+    ports:
+      - "3306:3306"
+    networks:
+      - app
+  austin-redis:
+    image: redis:3.2
+    ports:
+      - "6379:6379"
+    restart: always
+    container_name: austin-redis
+    volumes:
+      - ./doc/docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:rw
+    command:
+      /bin/bash -c "redis-server /usr/local/etc/redis/redis.conf"
+    networks:
+      - app
+  austin-zookeeper:
+    image: zookeeper:3.8.4
+    container_name: austin-zookeeper
+    volumes:
+      - "/etc/localtime:/etc/localtime"
+    ports:
+      - "2181:2181"
+    networks:
+      - app
+  austin-kafka:
+    image: wurstmeister/kafka
+    container_name: austin-kafka
+    volumes:
+      - "/etc/localtime:/etc/localtime"
+    environment:
+      KAFKA_BROKER_ID: 0
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://austin-kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ZOOKEEPER_CONNECT: austin-zookeeper:2181
+      KAFKA_CREATE_TOPICS: "austinBusiness:1:1,austinRecall:1:1,austinTraceLog:1:1"
+      KAFKA_HEAP_OPTS: -Xmx512M -Xms256M
+    ports:
+      - "9092:9092"
+    depends_on:
+      - austin-zookeeper
+    networks:
+      - app
+  austin-xxl-job:
+    image: xuxueli/xxl-job-admin:2.3.0
+    container_name: austin-xxl-job
+    ports:
+      - "18080:8080"
+    environment:
+      JAVA_OPTS: '-Xms256m -Xmx512m'
+      PARAMS: '--spring.datasource.url=jdbc:mysql://austin-mysql:3306/xxl_job?Unicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai --spring.datasource.username=root --spring.datasource.password=123456 --spring.datasource.hikari.minimum-idle=5 --spring.datasource.hikari.maximum-pool-size=20 --spring.datasource.hikari.idle-timeout=60000 --spring.datasource.hikari.max-lifetime=180000 --spring.datasource.hikari.connection-timeout=30000'
+    restart: unless-stopped
+    mem_limit: 768m
+    networks:
+      - app
+    depends_on:
+      - austin-mysql
+  austin-nacos:
+    container_name: austin-nacos-server
+    image: nacos/nacos-server:v2.1.0
+    environment:
+      - MODE=standalone
+      - PREFER_HOST_MODE=hostname
+      - SPRING_DATASOURCE_PLATFORM=mysql
+      - MYSQL_SERVICE_HOST=austin-mysql
+      - MYSQL_SERVICE_PORT=3306
+      - MYSQL_SERVICE_USER=root
+      - MYSQL_SERVICE_PASSWORD=123456
+      - MYSQL_SERVICE_DB_NAME=nacos_config
+      - JVM_XMS=128m
+      - JVM_XMX=128m
+      - JVM_XMN=128m
+    volumes:
+      - ./nacos-data/logs:/home/nacos/logs
+      - ./nacos-data/init.d:/home/nacos/init.d
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+      - "9849:9849"
+    depends_on:
+      - austin-mysql
+    restart: on-failure
+    networks:
+      - app
+  austin:
+    image: austin:1.0
+    ports:
+      - "7777:7777"
+    restart: always
+    container_name: austin
+    environment:
+      - SET_CONTAINER_TIMEZONE=true
+      - CONTAINER_TIMEZONE=Asia/Shanghai
+      - TZ=Asia/Shanghai
+      - AUSTIN_ENABLED_CHANNELS=${AUSTIN_ENABLED_CHANNELS:-10,30,40,110,130}
+      - AUSTIN_ENABLED_SMS_SCRIPTS=${AUSTIN_ENABLED_SMS_SCRIPTS:-MockSmsScript}
+      - AUSTIN_SMTP_HOST=${AUSTIN_SMTP_HOST:-}
+      - AUSTIN_SMTP_PORT=${AUSTIN_SMTP_PORT:-}
+      - AUSTIN_SMTP_USER=${AUSTIN_SMTP_USER:-}
+      - AUSTIN_SMTP_FROM=${AUSTIN_SMTP_FROM:-}
+      - AUSTIN_SMTP_AUTH_CODE=${AUSTIN_SMTP_AUTH_CODE:-}
+      - AUSTIN_SMTP_SSL_ENABLED=${AUSTIN_SMTP_SSL_ENABLED:-true}
+      - AUSTIN_SMTP_STARTTLS_ENABLED=${AUSTIN_SMTP_STARTTLS_ENABLED:-false}
+      - AUSTIN_EMAIL_TEST_ENABLED=${AUSTIN_EMAIL_TEST_ENABLED:-false}
+      - AUSTIN_EMAIL_TEST_TO=${AUSTIN_EMAIL_TEST_TO:-}
+      - AUSTIN_FEISHU_ROBOT_ENABLED=${AUSTIN_FEISHU_ROBOT_ENABLED:-false}
+      - AUSTIN_FEISHU_ROBOT_WEBHOOK=${AUSTIN_FEISHU_ROBOT_WEBHOOK:-}
+      - AUSTIN_FEISHU_TEST_ENABLED=${AUSTIN_FEISHU_TEST_ENABLED:-false}
+      - AUSTIN_FEISHU_TEST_ADMIN_TOKEN=${AUSTIN_FEISHU_TEST_ADMIN_TOKEN:-}
+    depends_on:
+      - austin-redis
+      - austin-mysql
+      - austin-zookeeper
+      - austin-kafka
+      - austin-xxl-job
+      - austin-nacos
+    networks:
+      - app
+networks:
+  app:

@@ -1,0 +1,159 @@
+{
+  "status": 0,
+  "msg": "",
+  "data": {
+    "pages": [
+      {
+        "label": "Home",
+        "url": "/",
+        "redirect": "/dashboard"
+      },
+      {
+        "label": "工作台",
+        "requiredPermission": "QUOTA_READ",
+        "icon": "fa fa-home",
+        "url": "/dashboard",
+        "schemaApi": "get:/pages/dashboard.json"
+      },
+      {
+        "label": "消息管理",
+        "requiredPermission": "TEMPLATE_READ",
+        "children": [
+          {
+            "label": "消息模板",
+            "url": "/crud/list",
+            "icon": "fa fa-file-text-o",
+            "schemaApi": "get:/pages/crud-list.json"
+          },
+          {
+            "label": "发送记录",
+            "requiredPermission": "TRACE_READ",
+            "url": "/messages/records",
+            "icon": "fa fa-paper-plane-o",
+            "schemaApi": "get:/pages/trace-user.json"
+          },
+          {
+            "label": "渠道账号",
+            "requiredPermission": "ACCOUNT_READ",
+            "url": "/account/list",
+            "icon": "fa fa-plug",
+            "schemaApi": "get:/pages/account-list.json"
+          },
+          {
+            "label": "新增模板",
+            "requiredPermission": "TEMPLATE_WRITE",
+            "url": "/crud/new",
+            "schemaApi": "get:/pages/crud-new.json",
+            "visible": false
+          },
+          {
+            "url": "/crud/:id",
+            "schemaApi": "get:/pages/crud-view.json",
+            "visible": false
+          },
+          {
+            "url": "/crud/:id/edit",
+            "requiredPermission": "TEMPLATE_WRITE",
+            "schemaApi": "get:/pages/crud-edit.json",
+            "visible": false
+          }
+        ]
+      },
+      {
+        "label": "费用与额度",
+        "requiredPermission": "QUOTA_READ",
+        "children": [
+          {
+            "label": "额度中心",
+            "icon": "fa fa-database",
+            "url": "/billing/quota",
+            "schemaApi": "get:/pages/quota-center.json"
+          },
+          {
+            "label": "购买额度",
+            "requiredPermission": "PAYMENT_PURCHASE",
+            "icon": "fa fa-shopping-cart",
+            "url": "/billing/purchase",
+            "schemaApi": "get:/pages/quota-purchase.json"
+          },
+          {
+            "label": "支付订单",
+            "requiredPermission": "PAYMENT_READ",
+            "icon": "fa fa-credit-card",
+            "url": "/billing/payments",
+            "schemaApi": "get:/pages/payment-orders.json"
+          },
+          {
+            "label": "月度报告",
+            "requiredPermission": "REPORT_READ",
+            "icon": "fa fa-bar-chart",
+            "url": "/billing/reports",
+            "schemaApi": "get:/pages/monthly-reports.json"
+          },
+          {
+            "url": "/billing/payments/result",
+            "requiredPermission": "PAYMENT_READ",
+            "schemaApi": "get:/pages/payment-result.json",
+            "visible": false
+          }
+        ]
+      },
+      {
+        "label": "通知中心",
+        "requiredPermission": "INBOX_ACCESS",
+        "icon": "fa fa-bell-o",
+        "url": "/inbox",
+        "schemaApi": "get:/pages/inbox.json"
+      },
+      {
+        "label": "运维中心",
+        "requiredPermission": "SYSTEM_ADMIN",
+        "children": [
+          {
+            "label": "MQ 死信",
+            "requiredPermission": "MQ_DEAD_LETTER_MANAGE",
+            "url": "/ops/mq-dead",
+            "schemaApi": "get:/pages/mq-dead.json"
+          },
+          {
+            "label": "Outbox 死信",
+            "requiredPermission": "BILLING_OUTBOX_MANAGE",
+            "url": "/ops/outbox-dead",
+            "schemaApi": "get:/pages/outbox-dead.json"
+          },
+          {
+            "label": "失败报告",
+            "requiredPermission": "REPORT_MANAGE",
+            "url": "/ops/reports-dead",
+            "schemaApi": "get:/pages/report-failures.json"
+          }
+        ]
+      },
+      {
+        "label": "租户设置",
+        "requiredPermission": "USER_MANAGE",
+        "children": [
+          {
+            "label": "成员与角色",
+            "icon": "fa fa-users",
+            "url": "/settings/members",
+            "schemaApi": "get:/pages/user-management.json"
+          },
+          {
+            "label": "基本信息",
+            "icon": "fa fa-building-o",
+            "url": "/settings/basic",
+            "schemaApi": "get:/pages/tenant-settings.json"
+          },
+          {
+            "label": "新增渠道账号",
+            "requiredPermission": "ACCOUNT_WRITE",
+            "url": "/account/new",
+            "schemaApi": "get:/pages/account-new.json",
+            "visible": false
+          }
+        ]
+      }
+    ]
+  }
+}

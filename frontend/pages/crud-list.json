@@ -1,0 +1,157 @@
+{
+  "type": "page",
+  "title": "消息模板",
+  "body": [
+    {
+      "type": "crud",
+      "name": "templateCrud",
+      "api": "${ls:backend_url}/messageTemplate/list?page=${page}&perPage=${perPage}&keywords=${keywords}&creator=${ls:openId}",
+      "syncLocation": false,
+      "filter": {
+        "title": "",
+        "mode": "inline",
+        "wrapWithPanel": false,
+        "body": [
+          {"type": "input-text", "name": "keywords", "placeholder": "按关键字搜索", "clearable": true, "addOn": {"label": "搜索", "type": "submit", "className": "btn-success"}}
+        ]
+      },
+      "headerToolbar": [
+        {"type": "button", "label": "新增模板", "level": "primary", "actionType": "link", "link": "/crud/new", "requiredPermission": "TEMPLATE_WRITE"},
+        "pagination"
+      ],
+      "footerToolbar": ["switch-per-page", "pagination"],
+      "columns": [
+        {"name": "id", "label": "ID", "width": 70},
+        {"name": "name", "label": "模板名称"},
+        {
+          "name": "sendChannel",
+          "label": "发送渠道",
+          "type": "select",
+          "disabled": true,
+          "source": {
+            "method": "get",
+            "url": "${ls:backend_url}/channel/list?creator=${ls:openId}&includeDisabled=true",
+            "adaptor": "return {status: payload.status, msg: payload.msg, data: (payload.data || []).map(function(item) { return {label: item.name, value: String(item.code)}; })};"
+          }
+        },
+        {
+          "name": "channelReady",
+          "label": "渠道状态",
+          "type": "mapping",
+          "map": {
+            "true": "<span class=\"label label-success\">可发送</span>",
+            "false": "<span class=\"label label-danger\">渠道已禁用/账号未配置</span>"
+          }
+        },
+        {"name": "channelAvailabilityMessage", "label": "状态说明"},
+        {
+          "name": "templateType",
+          "label": "模板类型",
+          "type": "mapping",
+          "map": {"10": "定时任务", "20": "实时接口"}
+        },
+        {
+          "name": "msgType",
+          "label": "消息类型",
+          "type": "mapping",
+          "map": {"10": "通知类", "20": "营销类", "30": "验证码"}
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "fixed": "right",
+          "buttons": [
+            {
+              "type": "button",
+              "label": "测试",
+              "requiredPermission": "TEMPLATE_EXECUTE",
+              "level": "primary",
+              "disabledOn": "this.channelReady !== true",
+              "tooltip": "渠道已禁用或账号未配置时不能测试发送",
+              "actionType": "dialog",
+              "dialog": {
+                "title": "测试一条消息",
+                "body": {
+                  "type": "form",
+                  "api": {
+                    "method": "post",
+                    "url": "${ls:backend_url}/messageTemplate/test",
+                    "data": {"id": "${id}", "receiver": "${receiver}", "sendChannel": "${sendChannel}", "testParam": "${testParam}"},
+                    "requestAdaptor": "api.data.msgContent = JSON.stringify((api.data.testParam && api.data.testParam[0]) || {}); if (Number(api.data.sendChannel) === 110) { api.data.receiver = 'FEISHU_WEBHOOK_GROUP'; } if (Number(api.data.sendChannel) === 130) { api.data.receiver = 'GENERIC_WEBHOOK'; } delete api.data.sendChannel; delete api.data.testParam; return api;"
+                  },
+                  "body": [
+                    {
+                      "type": "service",
+                      "api": "${ls:backend_url}/billing/quota",
+                      "requiredPermission": "QUOTA_READ",
+                      "body": [
+                        {
+                          "type": "alert",
+                          "level": "danger",
+                          "showIcon": true,
+                          "visibleOn": "this.availableQuota < 1",
+                          "body": "当前额度不足，测试发送需要 1 条额度。<a href=\"#/billing/purchase\">购买额度</a>"
+                        },
+                        {
+                          "type": "tpl",
+                          "tpl": "<div class=\"notify-soft-card m-b-md\"><div class=\"notify-kicker\">Send estimate</div><b>接收人数：1</b><span class=\"m-l-lg\">预计消耗额度：1</span><span class=\"m-l-lg\">当前可用：${availableQuota}</span><span class=\"m-l-lg\">发送后预计剩余：${availableQuota - 1}</span><div class=\"text-muted m-t-xs\">前端估算仅用于确认，最终以服务端额度预占结果为准。</div></div>"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "input-text",
+                      "name": "receiver",
+                      "label": "接收者",
+                      "value": "${ls:openId}",
+                      "readOnlyOn": "this.sendChannel == 10",
+                      "visibleOn": "this.sendChannel != 110 && this.sendChannel != 130",
+                      "requiredOn": "this.sendChannel != 110 && this.sendChannel != 130"
+                    },
+                    {"type": "tpl", "visibleOn": "this.sendChannel == 110", "tpl": "消息将发送到账号对应的飞书群。"},
+                    {"type": "tpl", "visibleOn": "this.sendChannel == 130", "tpl": "消息将 POST 到账号对应的通用 Webhook。"},
+                    {"type": "service", "schemaApi": "post:${ls:backend_url}/messageTemplate/test/content?id=${id}"}
+                  ]
+                }
+              }
+            },
+            {"type": "button", "label": "查看", "level": "link", "actionType": "link", "link": "/crud/${id}"},
+            {"type": "button", "label": "编辑", "level": "link", "actionType": "link", "link": "/crud/${id}/edit", "requiredPermission": "TEMPLATE_WRITE"},
+            {
+              "type": "button",
+              "label": "启动",
+              "requiredPermission": "TEMPLATE_EXECUTE",
+              "level": "success",
+              "actionType": "ajax",
+              "api": "post:${ls:backend_url}/messageTemplate/start/${id}",
+              "confirmText": "确认启动该定时任务？发送额度将由服务端按实际接收人数预占，余额不足时任务会被阻断。",
+              "visibleOn": "this.templateType == 10 && this.msgStatus != 30",
+              "disabledOn": "this.channelReady !== true",
+              "tooltip": "渠道已禁用或账号未配置时不能启动任务"
+            },
+            {
+              "type": "button",
+              "label": "停止",
+              "requiredPermission": "TEMPLATE_EXECUTE",
+              "level": "warning",
+              "actionType": "ajax",
+              "api": "post:${ls:backend_url}/messageTemplate/stop/${id}",
+              "confirmText": "确认停止该定时任务？",
+              "visibleOn": "this.templateType == 10 && this.msgStatus == 30"
+            },
+            {
+              "type": "button",
+              "label": "复制",
+              "requiredPermission": "TEMPLATE_WRITE",
+              "level": "link",
+              "actionType": "ajax",
+              "api": "post:${ls:backend_url}/messageTemplate/copy/${id}",
+              "disabledOn": "this.channelReady !== true",
+              "tooltip": "渠道不可用时不能复制后再次提交"
+            }
+          ]
+        }
+      ],
+      "placeholder": "暂无模板。渠道禁用不会隐藏历史模板。"
+    }
+  ]
+}

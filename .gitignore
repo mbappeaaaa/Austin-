@@ -1,0 +1,27 @@
+# ==== IDE ====
+.idea/
+.vscode/
+*.iml
+.arts/
+.codeartsdoer/
+.codegraph/
+.workbuddy/
+
+# ==== OS ====
+.DS_Store
+Thumbs.db
+
+# ==== Backend: build & logs ====
+backend/**/target/
+backend/logs/
+backend/**/*.log
+
+# ==== Backend: local environment configs (copy from .example, never commit) ====
+backend/austin-web/src/main/resources/application-dev.properties
+backend/austin-web/src/main/resources/application-mac.properties
+
+# ==== Frontend ====
+frontend/node_modules/
+frontend/dist/
+frontend/.pnpm-debug.log
+frontend/npm-debug.log*

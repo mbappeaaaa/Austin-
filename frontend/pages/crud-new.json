@@ -1,0 +1,188 @@
+{
+  "type": "page",
+  "title": "新建消息模板",
+  "subTitle": "可用渠道由 Austin 后端实时返回",
+  "body": [
+    {
+      "type": "form",
+      "name": "templateForm",
+      "mode": "horizontal",
+      "affixFooter": true,
+      "redirect": "/crud/list?page=1",
+      "body": [
+        {
+          "type": "fieldSet",
+          "title": "基本配置",
+          "body": [
+            {"type": "input-text", "name": "name", "label": "模板名称", "required": true},
+            {"type": "input-text", "name": "proposer", "label": "模板业务方"},
+            {
+              "type": "radios",
+              "name": "msgType",
+              "label": "消息类型",
+              "required": true,
+              "options": [
+                {"label": "通知类", "value": "10"},
+                {"label": "营销类", "value": "20"},
+                {"label": "验证码", "value": "30"}
+              ]
+            },
+            {
+              "type": "radios",
+              "name": "shieldType",
+              "label": "屏蔽类型",
+              "required": true,
+              "options": [
+                {"label": "夜间不屏蔽", "value": "10"},
+                {"label": "夜间屏蔽", "value": "20"},
+                {"label": "夜间屏蔽（次日 9 点发送）", "value": "30"}
+              ]
+            },
+            {
+              "type": "radios",
+              "name": "templateType",
+              "label": "模板类型",
+              "required": true,
+              "options": [
+                {"label": "定时", "value": "10"},
+                {"label": "实时", "value": "20"}
+              ]
+            },
+            {
+              "type": "input-text",
+              "name": "expectPushTime",
+              "label": "Cron 表达式",
+              "visibleOn": "this.templateType == 10",
+              "requiredOn": "this.templateType == 10",
+              "clearValueOnHidden": false,
+              "placeholder": "立即执行可填写 0"
+            },
+            {
+              "type": "input-file",
+              "name": "file",
+              "label": "人群 CSV",
+              "visibleOn": "this.templateType == 10",
+              "requiredOn": "this.templateType == 10",
+              "accept": ".csv",
+              "receiver": "${ls:backend_url}/messageTemplate/upload",
+              "autoFill": {"cronCrowdPath": "${value}"}
+            },
+            {"type": "hidden", "name": "cronCrowdPath"}
+          ]
+        },
+        {
+          "type": "fieldSet",
+          "title": "渠道与账号",
+          "body": [
+            {
+              "type": "select",
+              "name": "sendChannel",
+              "label": "发送渠道",
+              "required": true,
+              "searchable": true,
+              "clearable": false,
+              "source": {
+                "method": "get",
+                "url": "${ls:backend_url}/channel/list?creator=${ls:openId}&includeDisabled=false",
+                "adaptor": "return {status: payload.status, msg: payload.msg, data: (payload.data || []).filter(function(item) { return item.enabled === true; }).map(function(item) { return {label: item.name, value: String(item.code), availabilityStatus: item.availabilityStatus, availabilityMessage: item.availabilityMessage, requiresAccount: item.requiresAccount}; })};"
+              },
+              "autoFill": {
+                "channelAvailabilityStatus": "${availabilityStatus}",
+                "channelAvailabilityMessage": "${availabilityMessage}",
+                "channelRequiresAccount": "${requiresAccount}"
+              }
+            },
+            {
+              "type": "select",
+              "name": "sendAccount",
+              "label": "发送账号",
+              "visibleOn": "this.sendChannel && this.sendChannel != 10",
+              "requiredOn": "this.sendChannel && this.sendChannel != 10",
+              "searchable": true,
+              "clearable": false,
+              "source": {
+                "method": "get",
+                "url": "${ls:backend_url}/account/queryByChannelType?channelType=${sendChannel}&creator=${ls:openId}",
+                "adaptor": "var sms = String(api.url || '').indexOf('channelType=30') >= 0; var options = (payload.data || []).filter(function(item) { return !sms || (String(item.value) !== '0' && item.disabled !== true && item.availabilityStatus === 'READY'); }); return {status: payload.status, msg: payload.msg, data: options};"
+              },
+              "autoFill": {
+                "accountAvailabilityStatus": "${availabilityStatus}",
+                "accountAvailabilityMessage": "${availabilityMessage}"
+              }
+            },
+            {
+              "type": "alert",
+              "level": "warning",
+              "showIcon": true,
+              "visibleOn": "this.sendChannel != 10 && this.accountAvailabilityMessage",
+              "body": "${accountAvailabilityMessage}"
+            },
+            {
+              "type": "tpl",
+              "visibleOn": "this.sendChannel == 10",
+              "tpl": "<div class=\"text-success\">IM 站内信无需账号，保存时 sendAccount 固定为 0。</div>"
+            }
+          ]
+        },
+        {
+          "type": "fieldSet",
+          "title": "消息内容",
+          "body": [
+            {"type": "input-text", "name": "title", "label": "标题", "visibleOn": "this.sendChannel == 10 || this.sendChannel == 40", "requiredOn": "this.sendChannel == 10 || this.sendChannel == 40"},
+            {"type": "textarea", "name": "content", "label": "正文", "visibleOn": "this.sendChannel == 10 || this.sendChannel == 30 || this.sendChannel == 40 || this.sendChannel == 110", "requiredOn": "this.sendChannel == 10 || this.sendChannel == 30 || this.sendChannel == 40 || this.sendChannel == 110", "minRows": 6},
+            {"type": "input-text", "name": "url", "label": "跳转链接", "visibleOn": "this.sendChannel == 10 || this.sendChannel == 40 || this.sendChannel == 110"},
+            {
+              "type": "editor",
+              "name": "webhookBody",
+              "label": "Webhook JSON Body",
+              "visibleOn": "this.sendChannel == 130",
+              "requiredOn": "this.sendChannel == 130",
+              "language": "json",
+              "size": "xl",
+              "validations": {"isJson": true},
+              "validationErrors": {"isJson": "Body 必须是合法 JSON"},
+              "description": "Body 必须是 JSON 对象或数组，可在字符串值中使用 {$变量名}。"
+            },
+            {
+              "type": "alert",
+              "level": "warning",
+              "visibleOn": "this.sendChannel && this.sendChannel != 10 && this.sendChannel != 30 && this.sendChannel != 40 && this.sendChannel != 110 && this.sendChannel != 130",
+              "body": "个人开发者版暂未提供该渠道的模板编辑器。"
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {"type": "button", "label": "取消", "actionType": "link", "link": "/crud/list"},
+        {
+          "type": "submit",
+          "label": "保存",
+          "level": "primary",
+          "disabledOn": "!this.sendChannel || (this.sendChannel != 10 && this.accountAvailabilityStatus != 'READY') || (this.sendChannel != 10 && this.sendChannel != 30 && this.sendChannel != 40 && this.sendChannel != 110 && this.sendChannel != 130)",
+          "tooltip": "除 IM 外必须选择 READY 账号；未提供编辑器的渠道不能提交"
+        }
+      ],
+      "api": {
+        "method": "post",
+        "url": "${ls:backend_url}/messageTemplate/save",
+        "data": {
+          "name": "${name}",
+          "proposer": "${proposer}",
+          "msgType": "${msgType}",
+          "shieldType": "${shieldType}",
+          "templateType": "${templateType}",
+          "expectPushTime": "${expectPushTime}",
+          "cronCrowdPath": "${cronCrowdPath}",
+          "creator": "${ls:openId}",
+          "sendChannel": "${sendChannel}",
+          "sendAccount": "${sendAccount}",
+          "title": "${title}",
+          "content": "${content}",
+          "url": "${url}",
+          "webhookBody": "${webhookBody}"
+        },
+        "requestAdaptor": "var channel = Number(api.data.sendChannel); var content = {}; if (channel === 10) { api.data.sendAccount = 0; api.data.idType = 10; content = {title: api.data.title || '', content: api.data.content || '', url: api.data.url || ''}; } else if (channel === 30) { api.data.idType = 30; content = {content: api.data.content || ''}; } else if (channel === 40) { api.data.idType = 50; content = {title: api.data.title || '', content: api.data.content || '', url: api.data.url || ''}; } else if (channel === 110) { api.data.idType = 10; content = {content: api.data.content || '', url: api.data.url || '', sendType: '10'}; } else if (channel === 130) { api.data.idType = 10; var body; try { body = JSON.parse(api.data.webhookBody); } catch (ignore) { throw new Error('Webhook Body 必须是合法 JSON'); } if (!body || (typeof body !== 'object')) { throw new Error('Webhook Body 必须是 JSON 对象或数组'); } content = {body: JSON.stringify(body)}; } else { throw new Error('个人开发者版未提供该渠道的模板编辑器'); } api.data.msgContent = JSON.stringify(content); delete api.data.title; delete api.data.content; delete api.data.url; delete api.data.webhookBody; return api;"
+      }
+    }
+  ]
+}

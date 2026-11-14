@@ -1,0 +1,71 @@
+{
+  "type": "page",
+  "body": [
+    {
+      "type": "form",
+      "title": "过滤条件",
+      "target": "chart1",
+      "submitOnInit": true,
+      "className": "m-b",
+      "wrapWithPanel": false,
+      "reload": "chart1",
+      "body": [
+        {
+          "type": "select",
+          "label": "查询模板：",
+          "name": "queryId",
+          "searchable": true,
+          "clearable": true,
+          "creatable": true,
+          "source": {
+            "method": "get",
+            "url": "${ls:backend_url}/messageTemplate/list?page=1&perPage=1000&creator=${ls:openId}",
+            "adaptor": "return {status: payload.status, msg: payload.msg, data: ((payload.data && payload.data.rows) || []).map(function(item) { return {label: item.name + '（ID: ' + item.id + '）', value: String(item.id)}; })};"
+          },
+          "size": "lg",
+          "mode": "",
+          "description": "可直接选择模板；也可输入模板 ID、16 位 businessId 或 messageId，系统会自动识别。",
+          "placeholder": "选择模板，或粘贴任意查询 ID"
+        },
+        {
+          "type": "static",
+          "description": "选择模板时默认查询当天数据；查询历史日期可输入对应的 16 位 businessId。"
+        },
+        {
+          "type": "button",
+          "label": "查询",
+          "actionType": "submit",
+          "level": "primary"
+        }
+      ],
+      "actions": []
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "grid",
+      "className": "m-t-lg",
+      "columns": [
+        {
+          "body": [
+            {
+              "type": "chart",
+              "name": "chart1",
+              "initFetch": false,
+              "replaceChartOption": true,
+              "clearPersistDataAfterSubmit": true,
+              "api": {
+                "url": "${ls:backend_url}/trace/messageTemplate",
+                "method": "post",
+                "data": {
+                  "businessId": "${queryId}"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

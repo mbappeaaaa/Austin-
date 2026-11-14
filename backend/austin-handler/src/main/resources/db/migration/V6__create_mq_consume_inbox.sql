@@ -1,0 +1,27 @@
+CREATE TABLE `mq_consume_inbox`
+(
+    `id`                 BIGINT       NOT NULL AUTO_INCREMENT,
+    `tenant_id`          BIGINT       NOT NULL,
+    `consumer_group`     VARCHAR(64)  NOT NULL,
+    `consume_key`        VARCHAR(128) NOT NULL,
+    `payload_hash`       CHAR(64)     NOT NULL,
+    `payload`            MEDIUMTEXT   NOT NULL,
+    `status`             VARCHAR(32)  NOT NULL,
+    `attempt_count`      INT          NOT NULL DEFAULT 0,
+    `max_attempts`       INT          NOT NULL,
+    `replay_count`       INT          NOT NULL DEFAULT 0,
+    `next_retry_at`      BIGINT                DEFAULT NULL,
+    `locked_until`       BIGINT                DEFAULT NULL,
+    `lock_owner`         VARCHAR(64)            DEFAULT NULL,
+    `last_error_code`    VARCHAR(64)            DEFAULT NULL,
+    `last_error_message` VARCHAR(512)           DEFAULT NULL,
+    `created`            INT          NOT NULL,
+    `updated`            INT          NOT NULL,
+    `version`            BIGINT       NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_mq_inbox_tenant_group_key` (`tenant_id`, `consumer_group`, `consume_key`),
+    KEY `idx_mq_inbox_retry` (`status`, `next_retry_at`, `id`),
+    KEY `idx_mq_inbox_lease` (`status`, `locked_until`, `id`),
+    KEY `idx_mq_inbox_tenant_created` (`tenant_id`, `created`, `id`),
+    CONSTRAINT `fk_mq_inbox_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='MQ消费Inbox与重试状态';

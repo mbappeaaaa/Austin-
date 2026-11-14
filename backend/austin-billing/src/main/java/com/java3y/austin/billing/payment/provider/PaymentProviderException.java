@@ -1,0 +1,11 @@
+package com.java3y.austin.billing.payment.provider;
+
+public class PaymentProviderException extends RuntimeException {
+    public PaymentProviderException(String message) {
+        super(message);
+    }
+
+    public PaymentProviderException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
