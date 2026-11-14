@@ -5,7 +5,8 @@ server.port=7778
 
 # Local IDEA runs cannot resolve Docker-internal service names such as austin-mysql.
 austin.database.ip=127.0.0.1
-austin.database.port=3306
+# 按你 docker-compose 的宿主机端口映射填写（仓库默认 compose 映射 33306 -> 容器 3306）
+austin.database.port=33306
 austin.database.username=root
 austin.database.password=your-mysql-password
 
