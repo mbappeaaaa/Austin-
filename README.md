@@ -71,7 +71,3 @@ npm run build    # 产物输出 dist/
 | `docker-compose*.yml` | 本地中间件编排，数据库密码为演示默认值 `123456`，部署时请修改 |
 
 **注意**：`application-dev.properties` / `application-mac.properties` 含环境密码，已在 `.gitignore` 中排除，请勿提交。
-
-## 开源致谢
-
-本项目基于开源项目 [Austin](https://github.com/ZhongFuCheng3y/austin)（Apache License 2.0）二次开发，感谢原作者 [ZhongFuCheng3y](https://github.com/ZhongFuCheng3y) 的开源贡献。
