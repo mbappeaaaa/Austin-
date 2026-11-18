@@ -20,7 +20,9 @@ import java.util.List;
 public class SendTaskModel implements ProcessModel {
 
     private Long tenantId;
-
+    /**
+     * 幂等键
+     */
     private String idempotencyKey;
 
     /**

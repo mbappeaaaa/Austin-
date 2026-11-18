@@ -16,6 +16,7 @@ Thumbs.db
 backend/**/target/
 backend/logs/
 backend/**/*.log
+logs/
 
 # ==== Backend: local environment configs (copy from .example, never commit) ====
 backend/austin-web/src/main/resources/application-dev.properties

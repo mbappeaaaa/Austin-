@@ -37,6 +37,8 @@ public class QuotaReserveAction implements BusinessProcess<SendTaskModel> {
 
     private final QuotaService quotaService;
     //1. 由 austin.billing.quota-enforcement-enabled 控制，false 时直接放行（跳过计费）；
+//    false	跳过整个配额检查——随便发，不扣额度（开源原版行为，也是项目默认值，这就是你最初疑惑“为什么发消息额度不变”的原因）
+//    true	发送前必须预占额度：余额够才放行，不够直接拒绝（返回“额度不足”）；你本地 dev 配置里开的就是 true
     @Value("${austin.billing.quota-enforcement-enabled:false}")
     private boolean quotaEnforcementEnabled;
 
@@ -52,6 +54,8 @@ public class QuotaReserveAction implements BusinessProcess<SendTaskModel> {
         }
         SendTaskModel model = context.getProcessModel();
         // 【预占2】没有幂等键就无法防重复，宁可拒绝
+//        预占时带的`reservationKey = 幂等键:下标` ，作用是 同一个请求重试不会重复预占
+//        ——网络超时后业务方重发同一笔请求，第二次预占会命中幂等键直接返回“已受理”，额度不会被扣两次。这就是注释里“幂等键防重复”的含义。
         if (model.getIdempotencyKey() == null || model.getIdempotencyKey().trim().isEmpty()) {
             context.setNeedBreak(true).setResponse(BasicResultVO.fail(
                     RespStatusEnum.CLIENT_BAD_PARAMETERS, "发送请求幂等键不能为空"));
@@ -63,6 +67,7 @@ public class QuotaReserveAction implements BusinessProcess<SendTaskModel> {
             // 同 key 重复请求 isCreated()=false → 幂等返回"已受理"
             for (int index = 0; index < model.getTaskInfo().size(); index++) {
                 TaskInfo task = model.getTaskInfo().get(index);
+                //计费对象不是“谁点了发送”，而是“这条消息要送到多少人手上”,`receiver` 参数是逗号分隔的字符串，拆开就是一组人
                 long amount = task.getReceiver().size();
                 String reservationKey = model.getIdempotencyKey() + ":" + index;
                 QuotaReservationResult result = quotaService.reserveWithResult(model.getTenantId(), amount,
