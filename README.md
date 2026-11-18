@@ -46,7 +46,7 @@ cp application-dev.properties.example application-dev.properties
 # 编辑 application-dev.properties，填入你的 MySQL/Redis 密码与支付签名密钥
 ```
 
-3. 启动（JDK 8+，Maven 3.6+）：
+3. 启动（**JDK 17** 构建与运行，Maven 3.9+；enforcer 强制构建工具链为 [17,18)）：
 
 ```bash
 mvn spring-boot:run -pl austin-web
